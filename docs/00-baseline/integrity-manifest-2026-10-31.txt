@@ -18,6 +18,7 @@ dca359e6faa22da0befd2687ee9f46d7eacbad870c114c5734b67983ba1a89e3        699  bac
 819c95a7f503c72a7f4d795854f71d3000e917b84ece32944d2e6dd506cb1d86       2956  backend/main.py
 49f178add8dd793113b01330e1ae57146852005a194bb86ffffca17381d0e048      11498  backend/models.py
 8baf336355df52220e80cec6e3bdc5356722700a64dc79c1c6cc1bb0d4c95fe0        198  backend/requirements-dev.txt
+d45fab5d3618ff2a02beae830dfcf7e3a99ab373a41605e89fa1a2a4b1143f0a       4162  backend/requirements.lock
 3bc1299a85117e87daca422302d3cc35cbdbdb89b0d2f35e089e7e4963979a01        247  backend/requirements.txt
 475ac958c086e7b3ec61f634fab04dbe22a3e72120e8bbbc6e581459f3008a44      19481  backend/routes.py
 820b9a168a7ec97a9d950ba5217df8b146558d391f5d922e65d3567b454dfe74       4892  backend/schemas.py
@@ -67,7 +68,7 @@ c53c46b1bb6fc7ae9c7aded2770f2fe5b69ccfbd20bf2bbba549806398fa3a78       9752  doc
 2bf719147a0d076a43f453f43d7f14cb4ebe0dd54d2152c8d6b1008e9803d723       3478  docs/02-architecture/ADR-0001-config-and-envs.md
 43fe99cbf7f6cb6bcf6eaa5824d4b2ef5b094bd705a58c15681d1323673eba9d       3098  docs/02-architecture/ID-CONVENTIONS.md
 d4d33dab5fa670c9d2d1b1ffd3699795d45fd4622056e34aea30b78c151f2971       2491  docs/02-architecture/INVARIANTS.md
-30b85c1fe18f3603ed3e8f9f24b9114717fcc35273d0308194aa8ac617c72dbc       3660  docs/03-verification/VERIFICATION-LOG.md
+d25846392a72531fed9c2d2545f781d59659433d70fe914e50d80f33672a7095       8276  docs/03-verification/VERIFICATION-LOG.md
 4f73b565f1f87712aedc3b4b7a74e08a91786663928651ecc11c27f99ab1837b        401  frontend/index.html
 bbbfefa4bb798dac75749b5b14c882022c75b864d0af5fa900e52a8ba2502eb6      63293  frontend/package-lock.json
 52cc77c78dcd81c7e9f41c990b5cb1b6a813c2c34564ffa6dc4b01340f46f5f7        433  frontend/package.json
@@ -93,14 +94,15 @@ ea2d883c6caedf0b2f1b0aee2daac24272402547ca9a768c1b563774bc6e00db      11236  fro
 5c9f88271f83f13685e8313ae03c8ed9620c658b2eb8c9806cec19ca352bbb2b       9552  frontend/src/pages/PurchaseOrders.jsx
 3a7030d7c17fd3be5648b37ba208b754dbd397e7231e874b901b3eaedee64322       5717  frontend/src/pages/ScheduleImpact.jsx
 b2bbb364728ff8e1d335f054525cfe6f7ae27848a37e0231aae00ce3795e4a1f       2762  frontend/src/pages/TermsAndConditions.jsx
-62737535e6a262b50261e2b54864ae31b6b9d909a516cd65eae71f41dabb81b3       1724  scripts/README.md
+8ff7523e9e36c5415e65d54024908477ecd4ba7bd5ed9129d2c80d5cae4c8f69       2029  scripts/README.md
 5bfeb14f9e23b8c4aeecdaa7a609004f51cfb94659cb8c4c963eb15cba0b3ba4       3558  scripts/db-health.ps1
 4853e1c2f97883c615ac7dcc7d1aec9ae62a05560309da426fd0d9d1f0b1a7e1       6942  scripts/db-init.ps1
 cca510a7ddcf028aeb9c9667106b141f550a4e45eb8e6007959f09990e529250       1767  scripts/envcheck.py
-0714424c0c18ecf352a2925d307a439e00a48c7c7db153a7bf115aa5aef4de84       1125  scripts/install-hooks.ps1
-d1ffe29f7eb0aab0bc61b7e5e47a8892ca6da68d43568a7f7fc82b6f621deadc       1639  scripts/pre-commit
-fa2f3845e39e4f445b93f60658fd602a149cf31f24765841c46ad4a621921c33       3873  scripts/preflight.ps1
-6a1fe15461821e2f266965542a997a1f3fa4c3301cddfc4df7527bd165b2ce22       4197  scripts/setup.ps1
+29a5006d7dfc87554b9ac9b1a83cd0ca07fbc78c3cd1afbbdfd239798adee672       2912  scripts/freeze-lock.ps1
+be4c799fb402f13a3e80c80350bebf99127c3a887a92175bc9442b97e0c6fae4       1127  scripts/install-hooks.ps1
+6ed9581550a5e0a887f1854360db4889f6bc7f7b56498bc609c28d0d63b077f5       1989  scripts/pre-commit
+2f17140104d65debf092cc4869f39a69cc951c5f4aa8c329e6bff72dd7da5c5a       3920  scripts/preflight.ps1
+932413c409cdedcbb13a4d86c6b2c6bee5af392e7e1c3d789e019ab0f2101d9c       4284  scripts/setup.ps1
 ef40f2516189a57a9321502ccb3ad90efa418b395cbc5710b3582b395c9e4c77       3204  scripts/verify-fast.ps1
 b919238a76c68f1adb1fa6cdb115525058b864e84add5d2c7f8b5c907e38cbec       2217  scripts/verify-full.ps1
 2c56a8e750f9f06d13d6060b31bf2aee60bf602a19c229a9c1c9195a95b65b2d      16788  tests/test_project.py

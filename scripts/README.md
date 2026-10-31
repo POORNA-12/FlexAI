@@ -10,6 +10,9 @@ All scripts are **Windows PowerShell** (ADR-0001 D0/D6). None of them change app
 | `verify-full.ps1` | no | yes (seeds if empty) | DB health → seed → full pytest suite |
 | `db-init.ps1` | **yes** | yes | initialise MySQL 8.0, register `MySQL80`, create DB + least-privilege `yfx_app`, write `backend\.env` |
 | `db-health.ps1` | no | no | service, version, connectivity, schema, row counts, grants |
+| `freeze-lock.ps1` | no | yes | regenerate `backend\requirements.lock` from the measured environment (ADR-0001 D5) |
+| `install-hooks.ps1` | no | yes | install the versioned pre-commit secret scan |
+| `pre-commit` | no | no | the hook itself: blocks hardcoded credentials, private keys, tracked `.env` |
 | `envcheck.py` | no | no | interpreter + import report (used when shell quoting makes `-c` awkward) |
 
 ## Typical sequence
