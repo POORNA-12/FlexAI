@@ -59,6 +59,13 @@ $env:MYSQL_PWD = $dbPass
 $version = & $mysql.FullName --protocol=TCP -h $dbHost -P $dbPort -u $dbUser -N -B -e "SELECT VERSION();" 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "   FAIL  cannot connect as $dbUser -> $version" -ForegroundColor Red
+    if ($dbUser -eq "root") {
+        Write-Host "         backend\.env still uses root. Provision the app user (Administrator shell):" -ForegroundColor Yellow
+        Write-Host "           .\scripts\db-init.ps1 -RootPassword '<root password>'" -ForegroundColor Yellow
+        Write-Host "         Root password unknown? Use:  .\scripts\db-init.ps1 -ResetRoot" -ForegroundColor Yellow
+    } else {
+        Write-Host "         Check DB_PASSWORD / DB_USER in backend\.env, or re-run scripts\db-init.ps1." -ForegroundColor Yellow
+    }
     Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
     exit 1
 }

@@ -21,7 +21,9 @@
 #
 param(
     [switch]$RotateRoot,
-    [string]$RootPassword
+    [string]$RootPassword,
+    [switch]$ResetRoot,
+    [string]$NewRootPassword
 )
 
 # Native tools (mysqld/mysql) write to stderr on success paths; explicit $LASTEXITCODE
@@ -97,6 +99,56 @@ if (-not (Test-Path (Join-Path $dataDir "mysql"))) {
     Say "   initialised (root has NO password yet)" "Yellow"
 } else {
     Say "   already initialised - leaving data untouched"
+}
+
+Say ""
+Say "== 2b. Root password recovery ==" "Cyan"
+# -ResetRoot automates: stop service -> temporary --skip-grant-tables instance ->
+# ALTER USER -> stop temp instance -> start service. Used when the root password is unknown.
+if ($ResetRoot) {
+    if (-not $NewRootPassword) {
+        $sec = Read-Host "   NEW root password to set" -AsSecureString
+        $NewRootPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    }
+    if (-not $NewRootPassword) { Write-Host "BLOCKED: no new password supplied." -ForegroundColor Red; exit 1 }
+
+    Say "   stopping MySQL80 ..."
+    Stop-Service MySQL80 -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+
+    $tempArgs = @("--defaults-file=$myIni", "--skip-grant-tables")
+    Say "   starting temporary instance with --skip-grant-tables ..."
+    $proc = Start-Process -FilePath $mysqld -ArgumentList $tempArgs -PassThru
+
+    # wait for the port (max ~20s)
+    $ready = $false
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Seconds 1
+        if (Get-NetTCPConnection -LocalPort 3306 -State Listen -ErrorAction SilentlyContinue) { $ready = $true; break }
+    }
+    if (-not $ready) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        Start-Service MySQL80 -ErrorAction SilentlyContinue
+        Write-Host "BLOCKED: temporary instance did not open port 3306." -ForegroundColor Red
+        exit 1
+    }
+
+    $resetSql = "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY '$NewRootPassword';"
+    & $mysql -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e $resetSql 2>&1 | ForEach-Object { Write-Host "   $_" }
+    $resetCode = $LASTEXITCODE
+
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+    Start-Service MySQL80 -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+
+    if ($resetCode -ne 0) {
+        Write-Host "BLOCKED: root reset failed. Start the service and check the event log." -ForegroundColor Red
+        exit 1
+    }
+    Say "   root password reset; MySQL80 restarted" "Green"
+    $RootPassword = $NewRootPassword
 }
 
 Say ""
