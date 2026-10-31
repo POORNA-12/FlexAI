@@ -30,6 +30,7 @@
 | `02-architecture/ID-CONVENTIONS.md` | Entity ID shapes (incl. known drift) |
 | `02-architecture/INVARIANTS.md` | Rules the code must never break |
 | `03-verification/VERIFICATION-LOG.md` | Evidence per task, append-only |
+| `HANDOFF.md` | **Resume here.** Current state, the T09 blocker, next command, open decisions |
 
 ## Verify the snapshots
 

@@ -182,3 +182,47 @@ Revision 3 of the plan recorded "host Node v25.8.2 (non-LTS)" as an accepted ris
 That value came from **WSL**, not from the Windows run target. The measured Windows
 toolchain is `node v24.19.0` / `npm 11.8.0` (LTS line). AR-1 is retired, not mitigated.
 CHANDRA: CONTRADICTED-AND-CORRECTED — the risk was based on the wrong shell.
+
+---
+
+## Round 1 — T09 root-cause diagnosis (2026-10-31 05:30 UTC, Abhi)
+
+```
+T09  MySQL service — BLOCKED, root cause identified (was: "needs one elevated shell")
+
+     Not connectivity. 3306 is open and the server is healthy:
+       Get-Service MySQL*                      → MySQL80  Running  Automatic
+       netstat -ano | Select-String ':3306'    → TCP 0.0.0.0:3306 LISTENING 5772
+       Test-NetConnection 127.0.0.1 -Port 3306 → TcpTestSucceeded : True
+       service PathName                        → ...\MySQL Server 8.0\bin\mysqld.exe (8.4 not serviced)
+
+     Authentication is what fails:
+       mysql -u root --skip-password           → ERROR 1045 (28000) (using password: NO)
+       mysql -u root  (backend\.env password)  → ERROR 1045 (28000) (using password: YES)
+       .venv\Scripts\python.exe -m backend.check_db
+         → (1045, "Access denied for user 'root'@'localhost' (using password: YES)")   exit=1
+
+     Cause:
+       data dir CreationTime 2024-02-16 → pre-existing install, root password forgotten
+       backend\.env  DB_USER=root      → db-init step 6 never ran; yfx_app/database never created
+       db-init.ps1 stops at step 4     → "BLOCKED: could not create the database/app user."
+
+     Residue check (an aborted reset would have left these):
+       Get-Process mysqld               → only service PID 25072 (+ child 5772 on 3306), no skip-grant instance
+       icacls ...\Data                  → Access is denied for the interactive user (no leftover ACL grant)
+
+     Fix path (documented, not executed — awaiting Bro):
+       elevated:  .\scripts\db-init.ps1 -ResetRoot -NewRootPassword '<new>'
+       then:      .\scripts\db-health.ps1   → RESULT: HEALTHY
+                  .\scripts\verify-full.ps1 → 30/30
+
+     Defects found while diagnosing (Gate 3 backlog):
+       db-init.ps1:243  prints grants via --skip-password → guaranteed 1045 post-rotation
+       db-init.ps1:95   assigns $args (shadows the automatic variable)
+       -ResetRoot       does not connect-verify the new password before step 4
+       backend\.env     still holds the dead root password in plaintext (untracked)
+       history          same password present at 16ad28e (removed from HEAD, not from history)
+
+     Full handoff: docs/HANDOFF.md
+     CHANDRA: PENDING — diagnosis unverified by Assurance Authority
+```
