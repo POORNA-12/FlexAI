@@ -30,6 +30,10 @@ from backend.services import (
 from backend import models
 from backend.database import SessionLocal, init_db
 
+# Every test in this module exercises the live MySQL dataset (see pytest.ini markers).
+# Environment-only checks live in tests/test_smoke.py and run without a database.
+pytestmark = pytest.mark.db
+
 
 @pytest.fixture(scope="module")
 def dev_dataset():

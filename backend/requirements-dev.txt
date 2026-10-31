@@ -1,0 +1,6 @@
+# Development and verification tooling (never installed into production paths).
+# Pinned by measurement at T07 (see docs/01-setup/SETUP-CHECKLIST.md Step 4).
+
+pytest>=8.0.0
+ruff>=0.6.0
+mypy>=1.11.0

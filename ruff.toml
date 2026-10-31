@@ -1,0 +1,21 @@
+# Ruff configuration (validation tooling, ADR-0001 D6).
+# Linting is advisory during setup; Phase B turns the selected rules into a gate.
+
+target-version = "py312"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # long lines exist in the generated SQL/report strings
+    "B008",  # FastAPI Depends(...) in defaults is the framework idiom
+    "UP038", # optional performance-only rewrite
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011"]
+"backend/generator.py" = ["E741"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

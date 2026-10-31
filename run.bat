@@ -57,9 +57,17 @@ if not exist "database\schema.sql" (
 echo [OK] Project files and directory structure verified.
 
 :: 5. Create Python virtual environment if it does not exist
-if not exist "venv\Scripts\activate.bat" (
-    echo [SETUP] Creating Python virtual environment in .\venv ...
-    python -m venv venv --system-site-packages
+py -3.12 --version >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Python 3.12 launcher ^(py -3.12^) not found.
+    echo Install it with: winget install --id Python.Python.3.12 -e --scope user
+    echo Then open a NEW terminal and run run.bat again.
+    pause
+    exit /b 1
+)
+if not exist ".venv\Scripts\activate.bat" (
+    echo [SETUP] Creating Python 3.12 virtual environment in .\.venv ...
+    py -3.12 -m venv .venv
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Failed to create virtual environment.
         pause
@@ -67,18 +75,22 @@ if not exist "venv\Scripts\activate.bat" (
     )
     echo [OK] Virtual environment created.
 )
-call venv\Scripts\activate.bat
+call .venv\Scripts\activate.bat
 
 :: 6. Install backend dependencies only when necessary
-if not exist "venv\.deps_installed" (
-    echo [SETUP] Installing backend dependencies from requirements.txt ...
-    pip install -r backend\requirements.txt
+if not exist ".venv\.deps_installed" (
+    echo [SETUP] Installing backend dependencies ...
+    if exist "backend\requirements.lock" (
+        pip install --require-hashes -r backend\requirements.lock
+    ) else (
+        pip install -r backend\requirements.txt
+    )
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Backend dependency installation failed.
         pause
         exit /b 1
     )
-    echo deps_installed > venv\.deps_installed
+    echo deps_installed > .venv\.deps_installed
     echo [OK] Backend dependencies installed successfully.
 ) else (
     echo [OK] Backend dependencies already satisfied.
@@ -151,7 +163,7 @@ echo.
 echo Starting FastAPI backend in a dedicated console window...
 
 :: 12. Start FastAPI backend in a separate console window
-start "FastAPI Backend - Port 8000" cmd /k "cd /d ""%cd%"" && call venv\Scripts\activate.bat && python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+start "FastAPI Backend - Port 8000" cmd /k "cd /d ""%cd%"" && call .venv\Scripts\activate.bat && python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
 
 :: 13. Start React/Vite development server in this console
 echo Starting React Vite frontend server on port 5173...

@@ -1,6 +1,11 @@
 # Environment and secrets
 .env
 backend/.env
+.env.*
+*.bak
+*.bak.*
+_venv_*/
+.venv/
 
 # Python
 __pycache__/

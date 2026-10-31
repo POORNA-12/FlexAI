@@ -2,14 +2,16 @@
 FastAPI application entry point for Supplier Acknowledgement and Schedule Impact Manager.
 """
 
-import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.config import get_settings
 from backend.database import init_db, check_database_connection, SessionLocal
 from backend.routes import router
 from backend import models, services
+
+settings = get_settings()
 
 
 @asynccontextmanager
@@ -26,7 +28,7 @@ async def lifespan(app: FastAPI):
         try:
             po_count = db.query(models.PurchaseOrder).count()
             if po_count == 0:
-                default_scale = os.getenv("DATASET_SCALE", "full").lower().strip()
+                default_scale = settings.dataset_scale.lower().strip()
                 print(f"[Startup] Database is empty. Performing initial deterministic seed ({default_scale} scale)...")
                 services.seed_database_from_generator(scale=default_scale)
                 print(f"[Startup] Initial baseline seed completed successfully ({default_scale} scale).")
@@ -52,9 +54,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS for local development
-cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
-cors_origins = [orig.strip() for orig in cors_origins_env.split(",") if orig.strip()]
+# Configure CORS from validated settings (ADR-0001 D4)
+cors_origins = settings.cors_origin_list
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,7 +81,10 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    host = os.getenv("API_HOST", "127.0.0.1")
-    port = int(os.getenv("API_PORT", "8000"))
-    uvicorn.run("backend.main:app", host=host, port=port, reload=True)
+    uvicorn.run(
+        "backend.main:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=True,
+    )
 

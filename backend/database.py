@@ -2,31 +2,25 @@
 Database connection, session management, and safe schema initialization.
 """
 
-import os
 import urllib.parse
-from pathlib import Path
-from dotenv import load_dotenv
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Load environment variables
-env_path = Path(__file__).resolve().parent / ".env"
-if not env_path.exists():
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+from backend.config import get_settings
 
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "Aqswdefr@123")
-DB_NAME = os.getenv("DB_NAME", "supplier_schedule_manager")
+# Validated configuration (ADR-0001 D4). A missing DB_PASSWORD aborts startup:
+# there is deliberately no credential default anywhere in source.
+_settings = get_settings()
 
-# URL encode password for safety
-encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    f"mysql+pymysql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
-)
+# Backwards-compatible module-level names (consumed by backend/check_db.py).
+DB_HOST = _settings.db_host
+DB_PORT = str(_settings.db_port)
+DB_USER = _settings.db_user
+DB_NAME = _settings.db_name
+
+encoded_password = urllib.parse.quote_plus(_settings.db_password)
+DATABASE_URL = _settings.sqlalchemy_url()
 
 # Engine with connection pooling and timeouts
 engine = create_engine(
