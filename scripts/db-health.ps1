@@ -27,9 +27,15 @@ $dbUser = if ($cfg.ContainsKey("DB_USER")) { $cfg["DB_USER"] } else { "yfx_app" 
 $dbName = if ($cfg.ContainsKey("DB_NAME")) { $cfg["DB_NAME"] } else { "supplier_schedule_manager" }
 $dbPass = $cfg["DB_PASSWORD"]
 
-# --- locate the client (prefer 8.0) ---
-$mysql = Get-ChildItem "C:\Program Files\MySQL\MySQL Server 8.*\bin\mysql.exe" -ErrorAction SilentlyContinue |
-         Sort-Object FullName -Descending | Select-Object -First 1
+# --- locate the client (prefer 8.0 explicitly; 8.4 is also installed on this machine) ---
+$mysql = $null
+$mysql80 = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
+if (Test-Path $mysql80) {
+    $mysql = Get-Item $mysql80
+} else {
+    $mysql = Get-ChildItem "C:\Program Files\MySQL\MySQL Server 8.*\bin\mysql.exe" -ErrorAction SilentlyContinue |
+             Sort-Object FullName | Select-Object -First 1
+}
 if (-not $mysql) {
     Write-Host "FAIL: mysql client not found under C:\Program Files\MySQL" -ForegroundColor Red
     exit 1

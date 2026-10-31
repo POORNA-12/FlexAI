@@ -54,13 +54,35 @@ if ($svc) {
     Row "service MySQL80" "does not exist (SETUP-CHECKLIST Step 6)" $false
 }
 
-$client = Get-ChildItem "C:\Program Files\MySQL\MySQL Server 8.*\bin\mysql.exe" -ErrorAction SilentlyContinue |
-          Sort-Object FullName -Descending | Select-Object -First 1
+$client = $null
+$client80 = "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
+if (Test-Path $client80) {
+    $client = Get-Item $client80
+} else {
+    $client = Get-ChildItem "C:\Program Files\MySQL\MySQL Server 8.*\bin\mysql.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName | Select-Object -First 1
+}
 if ($client) { Row "mysql client" $client.FullName $true } else { Row "mysql client" "missing" $false }
 
 $dataDir = "C:\ProgramData\MySQL\MySQL Server 8.0\Data"
-$initialised = Test-Path (Join-Path $dataDir "mysql")
-if ($initialised) { Row "data dir initialised" "yes" $true } else { Row "data dir initialised" "no (needs admin init)" $false }
+$initialised = $false
+$dataNote = "missing"
+$probe = $null
+try {
+    # -ErrorAction Stop turns the ACL "access denied" into a catchable error
+    $probe = Test-Path (Join-Path $dataDir "mysql") -ErrorAction Stop
+} catch {
+    $probe = $null
+}
+if ($probe -eq $true) {
+    $initialised = $true
+    $dataNote = "yes"
+} elseif ($probe -eq $false) {
+    $dataNote = "no (needs admin init)"
+} else {
+    $dataNote = "protected (needs admin to inspect)"
+}
+if ($initialised) { Row "data dir initialised" $dataNote $true } else { Row "data dir initialised" $dataNote $false }
 
 $listening = Get-NetTCPConnection -LocalPort 3306 -State Listen -ErrorAction SilentlyContinue
 if ($listening) { Row "port 3306" "listening" $true } else { Row "port 3306" "closed" $false }

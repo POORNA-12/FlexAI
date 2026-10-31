@@ -153,3 +153,32 @@ CHANDRA: PASS | FAIL — <reason> (evidence checked: <what>)
 | B-1 | MySQL service init needs an elevated shell (`scripts\db-init.ps1`) | Bro | T09, T14 (cold start), `verify-full.ps1` |
 | B-2 | `backend\requirements.lock` generation in progress (pip-compile --generate-hashes) | Abhi | T07 completion, hashed installs |
 | B-3 | WSL remnant deletion (T16) awaits B-1 + a final manifest check | Bro | cleanup |
+
+---
+
+## Execution status — 2026-10-31 (end of session)
+
+| Task | State | Evidence location |
+|---|---|---|
+| T01 git baseline | ✅ PASS | commit `c0197f8`, 41 files |
+| T02 docs skeleton | ✅ PASS | `docs/` 4 sections |
+| T03 audit snapshots | ✅ PASS (redacted) | `docs/00-baseline/` + `SHA256SUMS` |
+| T04 integrity manifest | ✅ PASS | 107 → 109 files hashed across regeneration |
+| T05 relocation to C:\dev | ✅ PASS | 79/79 files identical |
+| T06 Python 3.12 + .venv | ✅ PASS | 3.12.10, `include-system-site-packages = false` |
+| T07 hashed lock | ✅ PASS | 38 packages, `--require-hashes` dry-run exit 0 |
+| T08 config hardening | ✅ PASS | `backend/config.py`; literal removed; root `.env` archived |
+| T09 MySQL service | ⛔ BLOCKED | needs one elevated shell (`scripts\db-init.ps1`) |
+| T10 verify harness | ✅ PASS | `verify-fast.ps1` → RESULT: PASS with MySQL stopped |
+| T11 tooling + hook | ✅ PASS | hook blocks planted secret; ruff advisory |
+| T12 docs content | ✅ PASS | prerequisites, checklist, runbook, ADR, IDs, invariants |
+| T13 launcher | ✅ PASS (static) | `.venv` paths, no `--system-site-packages`, interpreter fallback |
+| T14 cold start | ⏳ PENDING | needs MySQL (T09) |
+| T16 delete WSL remnant | ⏳ PENDING | needs T14 + Bro's go |
+
+### AR-1 correction (Chandra finding on the plan)
+
+Revision 3 of the plan recorded "host Node v25.8.2 (non-LTS)" as an accepted risk.
+That value came from **WSL**, not from the Windows run target. The measured Windows
+toolchain is `node v24.19.0` / `npm 11.8.0` (LTS line). AR-1 is retired, not mitigated.
+CHANDRA: CONTRADICTED-AND-CORRECTED — the risk was based on the wrong shell.
