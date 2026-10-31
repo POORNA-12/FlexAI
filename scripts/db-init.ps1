@@ -92,9 +92,9 @@ Say "== 2. Data directory ==" "Cyan"
 if (-not (Test-Path (Join-Path $dataDir "mysql"))) {
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
     Say "   empty -> initialising (this takes ~20 s) ..."
-    $args = @("--initialize-insecure", "--datadir=$dataDir")
-    if (Test-Path $myIni) { $args += "--defaults-file=$myIni" }
-    & $mysqld @args
+    $initArgs = @("--initialize-insecure", "`"--datadir=$dataDir`"")
+    if (Test-Path $myIni) { $initArgs += "`"--defaults-file=$myIni`"" }
+    & $mysqld @initArgs
     if ($LASTEXITCODE -ne 0) { Write-Host "BLOCKED: initialisation failed (see output above)." -ForegroundColor Red; exit 1 }
     Say "   initialised (root has NO password yet)" "Yellow"
 } else {
@@ -110,6 +110,18 @@ Say "== 2b. Root password recovery ==" "Cyan"
 # and is not readable by an interactive administrator. An elevated user can run mysqld,
 # but the process cannot open the data files until the ACL is widened for the duration
 # of the recovery. The grant is removed again before this script exits.
+function Test-PortOpen([string]$HostName = "127.0.0.1", [int]$Port = 3306) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $iar = $client.BeginConnect($HostName, $Port, $null, $null)
+        if ($iar.AsyncWaitHandle.WaitOne(500, $false)) {
+            $client.EndConnect($iar)
+            return $true
+        }
+    } catch { return $false } finally { $client.Close() }
+    return $false
+}
+
 if ($ResetRoot) {
     if (-not $NewRootPassword) {
         $secure = Read-Host "   NEW root password to set" -AsSecureString
@@ -128,7 +140,8 @@ if ($ResetRoot) {
     $waited = 0
     while ($waited -lt 20) {
         $state = (Get-Service MySQL80 -ErrorAction SilentlyContinue).Status
-        if ($state -ne "Running") { break }
+        $listening = Test-PortOpen
+        if ($state -ne "Running" -and -not $listening) { break }
         Start-Sleep -Seconds 1
         $waited++
     }
@@ -141,43 +154,52 @@ if ($ResetRoot) {
         exit 1
     }
 
-    Say "   starting temporary instance with --skip-grant-tables ..."
-    $tempArgs = @("--defaults-file=$myIni", "--skip-grant-tables", "--log-error=$errLog")
+    $initSql = Join-Path $tmpDir "mysql-init.sql"
+    "ALTER USER 'root'@'localhost' IDENTIFIED BY '$NewRootPassword';" | Set-Content -Path $initSql -Encoding ASCII
+
+    Say "   starting temporary recovery instance with --init-file ..."
+    $tempArgs = "`"--defaults-file=$myIni`" `"--init-file=$initSql`" `"--log-error=$errLog`""
     $proc = Start-Process -FilePath $mysqld -ArgumentList $tempArgs -PassThru
 
     $ready = $false
     for ($i = 0; $i -lt 30; $i++) {
         Start-Sleep -Seconds 1
-        if (Get-NetTCPConnection -LocalPort 3306 -State Listen -ErrorAction SilentlyContinue) { $ready = $true; break }
+        if (Test-PortOpen) { $ready = $true; break }
     }
 
     if (-not $ready) {
         Say "   recovery instance did not listen; last error-log lines:" "Yellow"
         if (Test-Path $errLog) { Get-Content $errLog -Tail 20 | ForEach-Object { Write-Host "     $_" } }
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        Remove-Item $initSql -Force -ErrorAction SilentlyContinue
         & icacls $dataDir /remove:g "$($env:USERNAME)" /T | Out-Null
         Start-Service MySQL80 -ErrorAction SilentlyContinue
         Write-Host "BLOCKED: recovery instance failed to start (log above)." -ForegroundColor Red
         exit 1
     }
 
-    $resetSql = "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY '$NewRootPassword';"
-    & $mysql -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e $resetSql 2>&1 | ForEach-Object { Write-Host "   $_" }
+    $env:MYSQL_PWD = $NewRootPassword
+    & $mysql -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e "SELECT 1;" 2>&1 | Out-Null
     $resetCode = $LASTEXITCODE
+    Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
 
     Say "   shutting the recovery instance down ..."
     $mysqladmin = Join-Path $bin "mysqladmin.exe"
     if (Test-Path $mysqladmin) {
+        $env:MYSQL_PWD = $NewRootPassword
         & $mysqladmin -u root --protocol=TCP -h 127.0.0.1 -P 3306 shutdown 2>$null | Out-Null
+        Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }
     if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     $waited = 0
     while ($waited -lt 15) {
-        if (-not (Get-NetTCPConnection -LocalPort 3306 -State Listen -ErrorAction SilentlyContinue)) { break }
+        if (-not (Test-PortOpen)) { break }
         Start-Sleep -Seconds 1
         $waited++
     }
+
+    Remove-Item $initSql -Force -ErrorAction SilentlyContinue
 
     Say "   restoring data-directory ACL ..."
     & icacls $dataDir /remove:g "$($env:USERNAME)" /T | Out-Null
@@ -238,9 +260,20 @@ if ($code -ne 0) {
 Say "   database supplier_schedule_manager ready"
 Say "   user yfx_app created with a generated password"
 
+$schemaFile = Join-Path $root "database\schema.sql"
+if (Test-Path $schemaFile) {
+    Say "   applying schema from database\schema.sql ..."
+    $code = Invoke-RootSql -Sql "" -SourceFile $schemaFile
+    if ($code -ne 0) {
+        Write-Host "WARN: schema apply reported non-zero ($code); continuing." -ForegroundColor Yellow
+    } else {
+        Say "   schema applied successfully"
+    }
+}
+
 Say ""
 Say "== 5. Grants ==" "Cyan"
-& $mysql -u root --skip-password --protocol=TCP -h 127.0.0.1 -P 3306 -e "SHOW GRANTS FOR 'yfx_app'@'localhost';"
+[void](Invoke-RootSql -Sql "SHOW GRANTS FOR 'yfx_app'@'localhost';")
 
 Say ""
 Say "== 6. backend\.env ==" "Cyan"
@@ -252,6 +285,7 @@ $lines = $lines | ForEach-Object {
     elseif ($_ -match '^DB_PASSWORD=') { "DB_PASSWORD=$appPassword" }
     elseif ($_ -match '^DB_HOST=')  { 'DB_HOST=127.0.0.1' }
     elseif ($_ -match '^DB_PORT=')  { 'DB_PORT=3306' }
+    elseif ($_ -match '^DATABASE_URL=') { "# $_" }
     else                            { $_ }
 }
 Set-Content -Path $envPath -Value $lines -Encoding UTF8

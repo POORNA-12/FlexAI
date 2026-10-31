@@ -36,7 +36,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "== 3. Seed (only if empty) ==" -ForegroundColor Cyan
 $seedScript = Join-Path $env:TEMP "yfx_seed_probe.py"
-@'
+@"
+import sys
+from pathlib import Path
+root = r"$root"
+if root not in sys.path:
+    sys.path.insert(0, root)
+
 from backend.database import init_db, SessionLocal
 from backend import models
 
@@ -51,9 +57,11 @@ try:
         print(f"seeded: {result['purchase_order_count']} POs, {result['total_business_records']} business rows")
 finally:
     db.close()
-'@ | Set-Content -Path $seedScript -Encoding UTF8
+"@ | Set-Content -Path $seedScript -Encoding ASCII
+$env:PYTHONPATH = $root
 & $py $seedScript
 $code = $LASTEXITCODE
+Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
 Remove-Item $seedScript -Force -ErrorAction SilentlyContinue
 if ($code -ne 0) {
     Write-Host "RESULT: FAIL (seed step)" -ForegroundColor Red
