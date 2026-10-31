@@ -69,32 +69,53 @@ git rm --cached backend/.env               # untrack
 
 `db-init.ps1` stops with `ERROR 1045 Access denied for user 'root'@'localhost'` when the data
 directory was initialised earlier with a password nobody remembers. Recover it like this —
-**Administrator shell required**, service stopped first:
+**Administrator shell required**.
 
 ```powershell
-$BIN  = "C:\Program Files\MySQL\MySQL Server 8.0\bin"
-$INI  = "C:\ProgramData\MySQL\MySQL Server 8.0\my.ini"
-
-Stop-Service MySQL80
-# temporary instance that ignores authentication (bind stays on 127.0.0.1 only)
-Start-Process -FilePath "$BIN\mysqld.exe" -ArgumentList "--defaults-file=$INI","--skip-grant-tables" -PassThru | Out-Null
-Start-Sleep -Seconds 6
-
-& "$BIN\mysql.exe" -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY 'NewRootPass123';"
-
-Stop-Process -Name mysqld -Force
-Start-Service MySQL80
-& "$BIN\mysql.exe" -u root -p -e "SELECT VERSION();"     # enter NewRootPass123
+cd C:\dev\yottaflexai3
+.\scripts\db-init.ps1 -ResetRoot -NewRootPassword 'NewRootPass123'
 ```
 
-Then finish provisioning with the new password:
+That is the whole procedure. It stops the service, starts a temporary `--skip-grant-tables`
+instance, sets the password, shuts it down cleanly, restores ACLs, restarts `MySQL80`, then
+creates the database and `yfx_app`.
+
+**Why it needs two extra steps under the hood (and why a naive attempt fails):** the data
+directory is owned by `LocalSystem` (the service account) and is not accessible to an
+interactive administrator. An elevated user can *run* `mysqld.exe`, but the process cannot
+open the data files. The script therefore grants the current user temporary access and
+removes it afterwards:
 
 ```powershell
-.\scripts\db-init.ps1 -RootPassword 'NewRootPass123'
+$DATA = "C:\ProgramData\MySQL\MySQL Server 8.0\Data"
+icacls $DATA /grant "$($env:USERNAME):(OI)(CI)F" /T     # before
+# ... recovery ...
+icacls $DATA /remove:g "$($env:USERNAME)" /T            # after
+```
+
+Manual equivalent, if you ever need it:
+
+```powershell
+$BIN = "C:\Program Files\MySQL\MySQL Server 8.0\bin"
+$INI = "C:\ProgramData\MySQL\MySQL Server 8.0\my.ini"
+$DATA = "C:\ProgramData\MySQL\MySQL Server 8.0\Data"
+
+Stop-Service MySQL80
+icacls $DATA /grant "$($env:USERNAME):(OI)(CI)F" /T
+Start-Process "$BIN\mysqld.exe" -ArgumentList "--defaults-file=$INI","--skip-grant-tables","--log-error=C:\dev\_tmp\reset.err" -PassThru | Out-Null
+Start-Sleep -Seconds 8
+
+& "$BIN\mysql.exe" -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY 'NewRootPass123';"
+& "$BIN\mysqladmin.exe" -u root --protocol=TCP -h 127.0.0.1 -P 3306 shutdown
+
+icacls $DATA /remove:g "$($env:USERNAME)" /T
+Start-Service MySQL80
 ```
 
 ⚠️ `--skip-grant-tables` accepts **any** connection while it runs. Keep it to seconds, and
 never leave the temporary instance running. This resets the password; it does not recover it.
+The ACL grant must be removed afterwards, or an ordinary user gains write access to the
+database files.
 
 ## Backup / restore (before any reseed or schema change)
 

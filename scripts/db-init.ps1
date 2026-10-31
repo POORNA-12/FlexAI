@@ -103,34 +103,61 @@ if (-not (Test-Path (Join-Path $dataDir "mysql"))) {
 
 Say ""
 Say "== 2b. Root password recovery ==" "Cyan"
-# -ResetRoot automates: stop service -> temporary --skip-grant-tables instance ->
-# ALTER USER -> stop temp instance -> start service. Used when the root password is unknown.
+# Automates: stop service -> temporary --skip-grant-tables instance -> ALTER USER ->
+# graceful shutdown -> restore ACLs -> start service.
+#
+# Why ACLs are touched: the data directory is owned by LocalSystem (the service account)
+# and is not readable by an interactive administrator. An elevated user can run mysqld,
+# but the process cannot open the data files until the ACL is widened for the duration
+# of the recovery. The grant is removed again before this script exits.
 if ($ResetRoot) {
     if (-not $NewRootPassword) {
-        $sec = Read-Host "   NEW root password to set" -AsSecureString
+        $secure = Read-Host "   NEW root password to set" -AsSecureString
         $NewRootPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
     }
     if (-not $NewRootPassword) { Write-Host "BLOCKED: no new password supplied." -ForegroundColor Red; exit 1 }
 
+    $tmpDir = "C:\dev\_tmp"
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $errLog = Join-Path $tmpDir "mysqld-reset.err"
+    if (Test-Path $errLog) { Remove-Item $errLog -Force }
+
     Say "   stopping MySQL80 ..."
     Stop-Service MySQL80 -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 3
+    $waited = 0
+    while ($waited -lt 20) {
+        $state = (Get-Service MySQL80 -ErrorAction SilentlyContinue).Status
+        if ($state -ne "Running") { break }
+        Start-Sleep -Seconds 1
+        $waited++
+    }
 
-    $tempArgs = @("--defaults-file=$myIni", "--skip-grant-tables")
+    Say "   granting temporary data-directory access to $($env:USERNAME) ..."
+    & icacls $dataDir /grant "$($env:USERNAME):(OI)(CI)F" /T | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "BLOCKED: could not grant data-directory access (elevation missing?)." -ForegroundColor Red
+        Start-Service MySQL80 -ErrorAction SilentlyContinue
+        exit 1
+    }
+
     Say "   starting temporary instance with --skip-grant-tables ..."
+    $tempArgs = @("--defaults-file=$myIni", "--skip-grant-tables", "--log-error=$errLog")
     $proc = Start-Process -FilePath $mysqld -ArgumentList $tempArgs -PassThru
 
-    # wait for the port (max ~20s)
     $ready = $false
-    for ($i = 0; $i -lt 20; $i++) {
+    for ($i = 0; $i -lt 30; $i++) {
         Start-Sleep -Seconds 1
         if (Get-NetTCPConnection -LocalPort 3306 -State Listen -ErrorAction SilentlyContinue) { $ready = $true; break }
     }
+
     if (-not $ready) {
+        Say "   recovery instance did not listen; last error-log lines:" "Yellow"
+        if (Test-Path $errLog) { Get-Content $errLog -Tail 20 | ForEach-Object { Write-Host "     $_" } }
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        & icacls $dataDir /remove:g "$($env:USERNAME)" /T | Out-Null
         Start-Service MySQL80 -ErrorAction SilentlyContinue
-        Write-Host "BLOCKED: temporary instance did not open port 3306." -ForegroundColor Red
+        Write-Host "BLOCKED: recovery instance failed to start (log above)." -ForegroundColor Red
         exit 1
     }
 
@@ -138,16 +165,31 @@ if ($ResetRoot) {
     & $mysql -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e $resetSql 2>&1 | ForEach-Object { Write-Host "   $_" }
     $resetCode = $LASTEXITCODE
 
-    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 3
+    Say "   shutting the recovery instance down ..."
+    $mysqladmin = Join-Path $bin "mysqladmin.exe"
+    if (Test-Path $mysqladmin) {
+        & $mysqladmin -u root --protocol=TCP -h 127.0.0.1 -P 3306 shutdown 2>$null | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+    $waited = 0
+    while ($waited -lt 15) {
+        if (-not (Get-NetTCPConnection -LocalPort 3306 -State Listen -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Seconds 1
+        $waited++
+    }
+
+    Say "   restoring data-directory ACL ..."
+    & icacls $dataDir /remove:g "$($env:USERNAME)" /T | Out-Null
+
     Start-Service MySQL80 -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
 
     if ($resetCode -ne 0) {
-        Write-Host "BLOCKED: root reset failed. Start the service and check the event log." -ForegroundColor Red
+        Write-Host "BLOCKED: root reset failed; MySQL80 restarted with the old credentials." -ForegroundColor Red
         exit 1
     }
-    Say "   root password reset; MySQL80 restarted" "Green"
+    Say "   root password reset; MySQL80 restarted; ACL restored" "Green"
     $RootPassword = $NewRootPassword
 }
 
