@@ -65,6 +65,37 @@ git rm --cached backend/.env               # untrack
 # rotate the credential — removing the file is not enough
 ```
 
+## Lost root password (MySQL 8.0 on Windows)
+
+`db-init.ps1` stops with `ERROR 1045 Access denied for user 'root'@'localhost'` when the data
+directory was initialised earlier with a password nobody remembers. Recover it like this —
+**Administrator shell required**, service stopped first:
+
+```powershell
+$BIN  = "C:\Program Files\MySQL\MySQL Server 8.0\bin"
+$INI  = "C:\ProgramData\MySQL\MySQL Server 8.0\my.ini"
+
+Stop-Service MySQL80
+# temporary instance that ignores authentication (bind stays on 127.0.0.1 only)
+Start-Process -FilePath "$BIN\mysqld.exe" -ArgumentList "--defaults-file=$INI","--skip-grant-tables" -PassThru | Out-Null
+Start-Sleep -Seconds 6
+
+& "$BIN\mysql.exe" -u root --protocol=TCP -h 127.0.0.1 -P 3306 -e "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY 'NewRootPass123';"
+
+Stop-Process -Name mysqld -Force
+Start-Service MySQL80
+& "$BIN\mysql.exe" -u root -p -e "SELECT VERSION();"     # enter NewRootPass123
+```
+
+Then finish provisioning with the new password:
+
+```powershell
+.\scripts\db-init.ps1 -RootPassword 'NewRootPass123'
+```
+
+⚠️ `--skip-grant-tables` accepts **any** connection while it runs. Keep it to seconds, and
+never leave the temporary instance running. This resets the password; it does not recover it.
+
 ## Backup / restore (before any reseed or schema change)
 
 ```powershell

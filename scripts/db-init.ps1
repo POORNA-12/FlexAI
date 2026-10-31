@@ -20,7 +20,8 @@
 #       .\scripts\db-init.ps1 -RotateRoot
 #
 param(
-    [switch]$RotateRoot
+    [switch]$RotateRoot,
+    [string]$RootPassword
 )
 
 # Native tools (mysqld/mysql) write to stderr on success paths; explicit $LASTEXITCODE
@@ -39,6 +40,33 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 function Say([string]$Text, [string]$Color = "Gray") { Write-Host $Text -ForegroundColor $Color }
+
+# Runs SQL as root, discovering the authentication mode in this order:
+#   1. no password (a freshly initialised datadir)
+#   2. -RootPassword parameter
+#   3. secure interactive prompt
+# Returns the mysql exit code.
+function Invoke-RootSql([string]$Sql, [string]$SourceFile) {
+    $baseArgs = @("-u", "root", "--protocol=TCP", "-h", "127.0.0.1", "-P", "3306")
+    if ($SourceFile) { $baseArgs += "-e"; $baseArgs += "source $($SourceFile -replace '\\','/')" }
+    else             { $baseArgs += "-e"; $baseArgs += $Sql }
+
+    & $mysql @baseArgs "--skip-password" 2>$null
+    if ($LASTEXITCODE -eq 0) { return 0 }
+
+    $secret = $RootPassword
+    if (-not $secret) {
+        $secure = Read-Host "MySQL root password (input hidden)" -AsSecureString
+        $secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    }
+
+    $env:MYSQL_PWD = $secret
+    & $mysql @baseArgs 2>&1 | ForEach-Object { Write-Host "   $_" }
+    $code = $LASTEXITCODE
+    Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
+    return $code
+}
 
 # --- locate MySQL 8.0 (explicitly prefer 8.0 over 8.4) ---
 $bin = "C:\Program Files\MySQL\MySQL Server 8.0\bin"
@@ -104,12 +132,13 @@ FLUSH PRIVILEGES;
 
 $tmp = Join-Path $env:TEMP "yfx_init_$([guid]::NewGuid().ToString('N')).sql"
 Set-Content -Path $tmp -Value $sql -Encoding ASCII
-& $mysql -u root --skip-password --protocol=TCP -h 127.0.0.1 -P 3306 -e "source $($tmp -replace '\\','/')"
-$code = $LASTEXITCODE
+$code = Invoke-RootSql -Sql "" -SourceFile $tmp
 Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 if ($code -ne 0) {
     Write-Host "BLOCKED: could not create the database/app user." -ForegroundColor Red
-    Write-Host "         If root already has a password, set it in a temporary MYSQL_PWD and re-run." -ForegroundColor Yellow
+    Write-Host "         root already has a password and the one supplied was rejected." -ForegroundColor Yellow
+    Write-Host "         Re-run with the real password:  .\scripts\db-init.ps1 -RootPassword '<pw>'" -ForegroundColor Yellow
+    Write-Host "         Forgot it? See 'Lost root password' in docs/01-setup/RUNBOOK.md." -ForegroundColor Yellow
     exit 1
 }
 Say "   database supplier_schedule_manager ready"
@@ -139,15 +168,13 @@ Say ""
 Say "== 7. Root password ==" "Cyan"
 if ($RotateRoot) {
     $secure = Read-Host "   new root password" -AsSecureString
-    $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+    $newPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-    & $mysql -u root --skip-password --protocol=TCP -h 127.0.0.1 -P 3306 `
-        -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$plain';"
-    if ($LASTEXITCODE -eq 0) { Say "   root password rotated. Store it in your password manager." "Green" }
-    else { Write-Host "   FAILED to rotate root; it is still passwordless." -ForegroundColor Red }
+    $code = Invoke-RootSql -Sql "ALTER USER 'root'@'localhost' IDENTIFIED BY '$newPlain';"
+    if ($code -eq 0) { Say "   root password rotated. Store it in your password manager." "Green" }
+    else { Write-Host "   FAILED to rotate root; the previous password is unchanged." -ForegroundColor Red }
 } else {
     Say "   skipped - verify the app first, then run: .\scripts\db-init.ps1 -RotateRoot" "Yellow"
-    Say "   WARNING: root currently has NO password. Any local user can log in as root." "Yellow"
 }
 
 Say ""
