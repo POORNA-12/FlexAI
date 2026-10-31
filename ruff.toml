@@ -9,7 +9,6 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = [
     "E501",  # long lines exist in the generated SQL/report strings
     "B008",  # FastAPI Depends(...) in defaults is the framework idiom
-    "UP038", # optional performance-only rewrite
 ]
 
 [lint.per-file-ignores]

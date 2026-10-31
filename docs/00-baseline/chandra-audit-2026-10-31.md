@@ -3,6 +3,7 @@
      snapshot    : 2026-10-31
      sha256      : 68ace125ec8a7fe79c0b5c51eb7e4db8493ecdd3e71e7f402048d27a7b23176c
      authority   : Chandra (Assurance Authority) — Gate 5
+     redaction   : live DB password literal replaced with <REDACTED-DB-PASSWORD>
      rule        : the original is the source of truth; this file is an immutable copy.
 -->
 
@@ -137,8 +138,8 @@ Affected Files: backend/database.py:18-29, .env:1-6, backend/.env
 ```
 
 **Evidence**
-- `backend/database.py:21` — `DB_PASSWORD = os.getenv("DB_PASSWORD", "Aqswdefr@123")`. The real password is the **fallback in a tracked source file**, so it survives deletion of `.env`.
-- `.env:4` and `backend/.env:4` contain `DB_PASSWORD=Aqswdefr@123` with `DB_USER=root` (`.env:3`), i.e. full-privilege MySQL credentials.
+- `backend/database.py:21` — `DB_PASSWORD = os.getenv("DB_PASSWORD", "<REDACTED-DB-PASSWORD>")`. The real password is the **fallback in a tracked source file**, so it survives deletion of `.env`.
+- `.env:4` and `backend/.env:4` contain `DB_PASSWORD=<REDACTED-DB-PASSWORD>` with `DB_USER=root` (`.env:3`), i.e. full-privilege MySQL credentials.
 - `.gitignore:2-3` correctly excludes `.env`, but the folder is distributed as a zip (no `.git` present), so the secret travels with it. `route`/`schema` scripts also embed the DB name from env.
 
 **Impact**
@@ -146,13 +147,13 @@ Anyone holding a copy of this folder owns the local MySQL instance: read/modify 
 
 **Attack Scenario**
 1. Attacker obtains the folder (zip, USB, chat, repo history).
-2. `mysql -h <host> -u root -pAqswdefr@123` — full server access; drop any schema, read any table.
+2. `mysql -h <host> -u root -p<REDACTED-DB-PASSWORD>` — full server access; drop any schema, read any table.
 
 **Recommendation**
 Rotate the password now. Delete the literal default (`DB_PASSWORD = os.getenv("DB_PASSWORD")` + fail fast if unset), create a least-privilege app user (`GRANT SELECT,INSERT,UPDATE,DELETE ON supplier_schedule_manager.*`), and add a secret-scanning pre-commit hook. Treat `.env` as compromised material and purge it from any shared archive.
 
 **Verification**
-`grep -rn "Aqswdefr" .` returns nothing; unset `DB_PASSWORD` must abort startup with a clear error; the app user must not have `GRANT`/`DROP` privileges.
+`grep -rn "<REDACTED-DB-PASSWORD>" .` returns nothing; unset `DB_PASSWORD` must abort startup with a clear error; the app user must not have `GRANT`/`DROP` privileges.
 
 ---
 

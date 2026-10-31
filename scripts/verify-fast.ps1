@@ -6,7 +6,10 @@
 # Usage:  .\scripts\verify-fast.ps1
 # Exit :  0 = PASS, 1 = FAIL
 #
-$ErrorActionPreference = "Stop"
+# NOTE: ErrorActionPreference is "Continue" on purpose - native tools (pip, pytest, ruff)
+# write to stderr on success paths, and "Stop" would abort the run on a harmless warning.
+#
+$ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
@@ -34,7 +37,7 @@ if (-not (Test-Path $py)) {
     exit 1
 }
 Check "venv python is 3.12.x" {
-    $v = & $py -c "import sys;print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    $v = (& $py -c "import sys;print(f'{sys.version_info.major}.{sys.version_info.minor}')") -join ""
     if ($v.Trim() -ne "3.12") { throw "found $v" }
 }
 Check "system site-packages disabled" {
@@ -44,28 +47,34 @@ Check "system site-packages disabled" {
 
 Section "2. Imports"
 Check "runtime dependencies import" {
-    & $py -c "import fastapi, sqlalchemy, pydantic, pymysql, openpyxl, pandas, dotenv; print('imports OK')" | Out-Null
+    & $py (Join-Path $root "scripts\envcheck.py") | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "envcheck reported missing modules" }
 }
 Check "application module imports without a database" {
-    & $py -c "import backend.config, backend.models, backend.business_rules, backend.validation, backend.generator; print('modules OK')" | Out-Null
+    & $py -c "import backend.config, backend.models, backend.business_rules, backend.validation, backend.generator" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "import failed" }
 }
 Check "configuration validates" {
-    & $py -c "from backend.config import get_settings; s=get_settings(); assert s.db_password; print('config OK', s.db_host, s.db_port)" | Out-Null
+    & $py -c "from backend.config import get_settings;s=get_settings();assert s.db_password;print('config OK')" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "settings invalid (is backend\.env present?)" }
 }
 
-Section "3. Static analysis (advisory)"
-& $py -m ruff check backend tests 2>&1 | Out-Host
+Section "3. Static analysis (advisory during setup)"
+$ruff = & $py -m ruff check backend tests 2>$null
+$ruff | Out-Host
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "   WARN  ruff reported findings (advisory during setup, blocking in Phase B)" -ForegroundColor Yellow
+    Write-Host "   WARN  ruff reported findings (advisory now, blocking in Phase B)" -ForegroundColor Yellow
+} else {
+    Write-Host "   PASS  ruff clean" -ForegroundColor Green
 }
 
 Section "4. Tests"
 Check "pytest collects" {
-    & $py -m pytest --collect-only -q 2>&1 | Out-Null
+    & $py -m pytest --collect-only -q 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "collection failed" }
 }
 Check "smoke suite passes (no DB)" {
-    & $py -m pytest -m "not db" -q 2>&1 | Out-Host
+    & $py -m pytest -m "not db" -q 2>$null | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "smoke tests failed" }
 }
 

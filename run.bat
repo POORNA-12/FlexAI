@@ -57,9 +57,17 @@ if not exist "database\schema.sql" (
 echo [OK] Project files and directory structure verified.
 
 :: 5. Create Python virtual environment if it does not exist
+set "PY312="
 py -3.12 --version >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Python 3.12 launcher ^(py -3.12^) not found.
+if %ERRORLEVEL% equ 0 (
+    set "PY312=py -3.12"
+) else (
+    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+        set "PY312="%LOCALAPPDATA%\Programs\Python\Python312\python.exe""
+    )
+)
+if not defined PY312 (
+    echo [ERROR] Python 3.12 not found ^(neither 'py -3.12' nor %%LOCALAPPDATA%%\Programs\Python\Python312).
     echo Install it with: winget install --id Python.Python.3.12 -e --scope user
     echo Then open a NEW terminal and run run.bat again.
     pause
@@ -67,7 +75,7 @@ if %ERRORLEVEL% neq 0 (
 )
 if not exist ".venv\Scripts\activate.bat" (
     echo [SETUP] Creating Python 3.12 virtual environment in .\.venv ...
-    py -3.12 -m venv .venv
+    %PY312% -m venv .venv
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Failed to create virtual environment.
         pause

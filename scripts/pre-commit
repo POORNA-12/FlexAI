@@ -1,0 +1,45 @@
+#!/bin/sh
+# Versioned pre-commit secret scan (installed by scripts/install-hooks.ps1).
+#
+# Design notes:
+#   * No credential value is embedded here - a guard must not carry the secret it protects.
+#   * Documentation and scripts are excluded from the assignment rule: they legitimately
+#     discuss and construct configuration. Only real config surfaces are scanned.
+#   * Placeholders (<...>, ${...}, change_me, example) are allowed.
+#   * Any hit prints WHY and WHAT to do. A hook that cries wolf gets disabled, so a
+#     false positive is treated as a bug in this script.
+
+blocked=0
+
+# --- 1. Secrets assigned in files that can actually carry them -------------------
+candidates=$(git diff --cached --name-only | grep -viE '^(docs/|scripts/)|\.md$|^\.gitignore$')
+if [ -n "$candidates" ]; then
+    hits=$(git diff --cached -U0 -- $candidates \
+        | grep -iE '^\+.*(DB_PASSWORD|DB_USER|SECRET_KEY|API_KEY|PRIVATE_KEY|ACCESS_TOKEN)[[:space:]]*=[[:space:]]*[^[:space:]#]+' \
+        | grep -viE 'change_me|your_password|placeholder|example|xxx|redacted|<[^>]*>|\$\{|\$[A-Za-z_]|getenv|os\.environ')
+    if [ -n "$hits" ]; then
+        echo "BLOCKED: a credential looks hardcoded in a config file:"
+        echo "$hits" | cut -c1-160
+        echo "         Put it in backend/.env (git-ignored) or a placeholder in *.example."
+        blocked=1
+    fi
+fi
+
+# --- 2. Private keys -------------------------------------------------------------
+if git diff --cached -U0 | grep -qE '^\+.*BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY'; then
+    echo "BLOCKED: staged change contains a private key block."
+    blocked=1
+fi
+
+# --- 3. A tracked .env (defence in depth: .gitignore should already prevent it) ---
+if git diff --cached --name-only | grep -qE '(^|/)\.env$'; then
+    echo "BLOCKED: a .env file is staged. It must never be committed."
+    blocked=1
+fi
+
+if [ "$blocked" -ne 0 ]; then
+    echo ""
+    echo "Commit rejected. See docs/01-setup/RUNBOOK.md -> Credentials."
+    exit 1
+fi
+exit 0

@@ -143,17 +143,30 @@ git check-ignore -v backend\.env
 **Verify no credential is hardcoded:**
 
 ```powershell
+Select-String -Path backend\*.py -Pattern 'os\.getenv\("DB_PASSWORD"' 
 Get-ChildItem -Recurse -File -Include *.py,*.bat,*.ps1 |
-  Select-String -Pattern "Aqswdefr" -SimpleMatch
+  Select-String -Pattern 'DB_PASSWORD\s*=\s*["'']' -CaseSensitive
 ```
-**Expected:** no output.
-**Remedy:** if it matches, you are on a pre-T08 commit — `git reset --hard` is not the fix; restore `backend\config.py` changes (T08).
+**Expected:** no output from either command (config.py reads the value; nothing assigns it in code).
+**Remedy:** if it matches, you are on a pre-T08 commit — restore `backend\config.py` and `backend\database.py` from `git log`.
 
 ☐ done
 
 ---
 
 ## Step 6 — MySQL 8.0 service (ADMIN once)
+
+> **Fast path (recommended):** run the provisioner instead of Steps 6+7 by hand.
+> ```powershell
+> # PowerShell as Administrator
+> cd C:\dev\yottaflexai3
+> .\scripts\db-init.ps1
+> ```
+> It initialises the data dir, registers/starts `MySQL80`, creates the DB, creates `yfx_app`
+> with a **generated** password, writes `backend\.env`, and restricts the file ACL.
+> Root rotation stays manual: `.\scripts\db-init.ps1 -RotateRoot`.
+>
+> The manual commands below remain the fallback and the explanation.
 
 Open **PowerShell as Administrator** in `C:\dev\yottaflexai3`:
 

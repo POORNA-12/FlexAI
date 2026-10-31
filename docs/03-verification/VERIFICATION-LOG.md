@@ -52,7 +52,7 @@ T06  Python 3.12 + .venv
 
 T08  configuration hardening
      backend/config.py          new: pydantic-settings, DB_PASSWORD required (no default)
-     backend/database.py        removed `os.getenv("DB_PASSWORD", "Aqswdefr@123")`
+     backend/database.py        removed the hardcoded DB_PASSWORD default (<REDACTED-DB-PASSWORD>)
      backend/main.py            CORS + host/port + dataset scale from settings; `import os` dropped
      .gitignore                 + .env.*  *.bak  *.bak.*  _venv_*/  .venv/
      root .env                  archived to C:\dev\_secrets-backup\.env.2026-10-31 (outside repo)

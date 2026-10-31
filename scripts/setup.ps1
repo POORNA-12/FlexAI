@@ -9,7 +9,9 @@ param(
     [switch]$SkipFrontend
 )
 
-$ErrorActionPreference = "Stop"
+# NOTE: ErrorActionPreference is "Continue" on purpose - pip/npm write to stderr on
+# success paths, and "Stop" would abort the provisioner on harmless progress output.
+$ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
@@ -66,6 +68,8 @@ if (Test-Path (Join-Path $root "backend\requirements.lock")) {
 }
 & $venvPy -m pip install --quiet -r backend\requirements-dev.txt
 & $venvPy -c "import fastapi, sqlalchemy, pydantic, pymysql, openpyxl, pandas, dotenv; print('   imports OK')"
+# marker consumed by run.bat (step 6) so it does not reinstall every launch
+Set-Content -Path (Join-Path $root ".venv\.deps_installed") -Value "deps_installed" -Encoding ASCII
 
 Say ""
 Say "== 4. Configuration ==" "Cyan"
@@ -77,8 +81,9 @@ if (-not (Test-Path $envPath)) {
     Say "   backend\.env present"
 }
 $plain = Get-Content $envPath -Raw
-if ($plain -match "Aqswdefr") {
-    Say "   WARN   backend\.env still holds the old hardcoded password - rotate it (SETUP-CHECKLIST Step 7)" "Yellow"
+if ($plain -match "(?m)^DB_USER=root\s*$") {
+    Say "   WARN   DB_USER=root - the app should run as the least-privilege 'yfx_app' user." "Yellow"
+    Say "          Run .\scripts\db-init.ps1 in an elevated shell to create it." "Yellow"
 }
 
 Say ""

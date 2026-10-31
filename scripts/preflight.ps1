@@ -73,10 +73,10 @@ if ($envExists) { Row "backend\.env" "present" $true } else { Row "backend\.env"
 
 if ($envExists) {
     $raw = Get-Content $envFile -Raw
-    $legacy = $raw -match "Aqswdefr"
-    if ($legacy) { Row "legacy secret" "OLD PASSWORD PRESENT" $false } else { Row "legacy secret" "clean" $true }
+    $usingRoot = $raw -match "(?m)^DB_USER=root\s*$"
+    if ($usingRoot) { Row "DB_USER" "root (not least-privilege - run scripts\db-init.ps1)" $false } else { Row "DB_USER" "app user" $true }
     $userLine = (Select-String -Path $envFile -Pattern '^DB_USER=' -ErrorAction SilentlyContinue).Line
-    Row "DB_USER" "$userLine" ([bool]$userLine)
+    Row "DB_USER line" "$userLine" ([bool]$userLine)
 }
 
 $repoExists = Test-Path (Join-Path $root ".git")
